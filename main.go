@@ -13,6 +13,8 @@ var owner = util.FromAddress("Aej1fe4mUgou48Zzup5j8sPrE3973cJ5oz")
 
 var currState := 0
 
+var locked := false
+
 func Main(operation string, args []interface{}) bool {
 	trigger := runtime.GetTrigger()
 
@@ -50,12 +52,20 @@ func handleOperation(operation string, args []interface{}) bool {
 	}
 
 
-	if operation == "accept_offer" {
+	if operation == "accept_application" {
 		// Gas
 		if checkArgs(args, 2) {
 			return false
 		}
-		accept_offer()
+		accept_application()
+	}
+
+	if operation == "reject_application" {
+		// Gas
+		if checkArgs(args, 2) {
+			return false
+		}
+		reject_application()
 	}
 
 
@@ -104,11 +114,14 @@ func apply_on_offer() bool {
 	} 
 }
 
-// The seller accepts the buyer's offer
-func accept_offer() bool {
+// The seller accepts the buyer's application
+func accept_application() bool {
 
 }
 
+func reject_application() bool {
+
+}
 
 func getCurrentTimeStamp() {
 	height := GetHeight()
