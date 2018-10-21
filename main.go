@@ -11,8 +11,6 @@ import (
 // Check if the invoker of the contract is the specified owner
 var owner = util.FromAddress("Aej1fe4mUgou48Zzup5j8sPrE3973cJ5oz")
 
-var currState := 0
-
 var locked := false
 
 func Main(operation string, args []interface{}) bool {
@@ -21,9 +19,11 @@ func Main(operation string, args []interface{}) bool {
 	// Log owner upon Verification trigger
 	if trigger == runtime.Verification() {
 		if runtime.CheckWitness(owner) {
-			runtime.Log("Verified Owner")
+			if !locked {
+				runtime.Log("Verified Owner")
+				return true
+			}
 		}
-		return true
 	}
 
 	// Discerns between log and notify for this test
@@ -116,7 +116,7 @@ func apply_on_offer() bool {
 
 // The seller accepts the buyer's application
 func accept_application() bool {
-
+	locked = true
 }
 
 func reject_application() bool {
