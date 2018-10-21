@@ -48,7 +48,7 @@ func handleOperation(operation string, args []interface{}) bool {
 		if checkArgs(args, 2) {
 			return false
 		}
-		apply_on_offer()
+		apply_on_offer(args)
 	}
 
 
@@ -61,10 +61,6 @@ func handleOperation(operation string, args []interface{}) bool {
 	}
 
 	if operation == "reject_application" {
-		// Gas
-		if checkArgs(args, 2) {
-			return false
-		}
 		reject_application()
 	}
 
@@ -73,7 +69,7 @@ func handleOperation(operation string, args []interface{}) bool {
 }
 
 // The seller puts an item on offer on the chain
-func create_offer() bool {
+func create_offer(args []interface{}) bool {
 	ctx := storage.GetContext()
 
 	key := args[0].([]byte)
@@ -83,7 +79,7 @@ func create_offer() bool {
 }
 
 // The buyer applies to seller's offer.
-func apply_on_offer() bool {
+func apply_on_offer(args []interface{}) bool {
 	tx := GetScriptContainer()
 
 	// Check if transaction has currency attached
@@ -93,7 +89,7 @@ func apply_on_offer() bool {
 	reference := references[0]
 
 
-	// Seller's address
+	// Buyer's address
 	sender := GetScriptHash(reference)
 
 	// Contract's address	
@@ -119,6 +115,7 @@ func accept_application() bool {
 	locked = true
 }
 
+// The seller rejects the buyer's application
 func reject_application() bool {
 
 }
@@ -136,8 +133,4 @@ func checkArgs(args []interface{}, length int) bool {
 	}
 
 	return false
-}
-
-func checkState(state int) bool {
-
 }
