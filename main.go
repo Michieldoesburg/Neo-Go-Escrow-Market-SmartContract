@@ -45,6 +45,11 @@ func Main(operation string, args []interface{}) bool {
 		}
 		if operation == "confirm_purchase" {
 			//TODO check if sender is the buyer
+			buyerPre := []byte("BUYER")
+			buyerKey := append(buyerPre, productHash...)
+			buyer := storage.Get(storage.GetContext(), buyerKey)
+			validateCallingAddress(buyer)
+
 			productHash := args[0].([]byte)
 
 			amountPre := []byte("AMOUNT")
@@ -55,28 +60,24 @@ func Main(operation string, args []interface{}) bool {
 			sellerKey := append(sellerPre, productHash...)
 			seller := storage.Get(storage.GetContext(), sellerKey)
 
-			buyerPre := []byte("BUYER")
-			buyerKey := append(buyerPre, productHash...)
-			buyer := storage.Get(storage.GetContext(), buyerKey)
-
 			token.Transfer(storage.GetContext(), engine.GetExecutingScriptHash(), buyer.([]byte),  1/4*productCost.(int))
 			token.Transfer(storage.GetContext(), engine.GetExecutingScriptHash(), seller.([]byte),  3/4*productCost.(int))
 			return true
 		}
 
 		if operation == "apply_to_offer" {
-			// Gas and buyer's contact info.
+			// Tokens and buyer's contact info.
 			if checkArgs(args, 2) {
 				return false
 			}
-			apply_to_offer(args)
+			apply_to_offer(token, args)
 		}
 		if operation == "accept_offer" {
 			// Gas and buyer's contact info.
 			if checkArgs(args, 2) {
 				return false
 			}
-			accept_offer(args)
+			accept_offer(token, args)
 		}
 	}
 	
@@ -107,39 +108,71 @@ func create_offer(args []interface{}) bool {
 }
 
 // The buyer applies to seller's offer.
-func apply_to_offer(args []interface{}) bool {
+func apply_to_offer(t Token, args []interface{}) bool {
+	amountSent := args[0]
 	
-	amountSent := getTxAmount() //CHECK IF HE HAS BALANCE
-
 	productHash := args[0].([]byte)
 	amountPre := []byte("AMOUNT")
 	amountKey := append(amountPre, productHash...)
 	productCost := storage.Get(storage.GetContext(), amountKey)
 
-	if amountSent != 2 * productCost.(int) { // IF HE HAS, SUBTRACT, otherwise, return false
+
+	// Check if buyer has enough tokens.
+	buyerPre := []byte("BUYER")
+	buyerKey := append(buyerPre, productHash...)
+	buyer := storage.Get(storage.GetContext(), buyerKey)
+
+	// Not enough tokens
+	if !token.canTransfer(storage.getContext, buyer([]byte), engine.GetCallingScriptHash(), amountSent) {
 		return false
 	}
+
+	// Tokens don't match price + escrow
+	if amountSent != 2 * productCost.(int) { 
+		return false
+	}
+
+	token.tranfser(storage.getContext, buyer([]byte), engine.GetExecutingScriptHash(), amountSent)
 
 	buyerPre := []byte("BUYER")
 	buyerKey := append(buyerPre, productHash...)
 	storage.Put(storage.GetContext(), buyerKey, engine.GetCallingScriptHash())
+
+	//TODO put buyers address on the chain (args[1])
 
 	return true
 
 }
 
 // The seller puts tokens in the escrow of the offer.
-func accept_offer(args []interface{}) bool {
-	
-	//TODO: Validate if sender is the seller
-	amountSent := getTxAmount() 	//CHECK IF HE HAS BALANCE
+func accept_offer(t Token, args []interface{}) bool {
+	amountSent := args[0]
+
+	//Validate if sender is the seller
+	sellerPre := []byte("SELLER")
+	sellerKey := append(sellerPre, productHash...)
+	seller := storage.Get(storage.GetContext(), sellerKey)
+	validateCallingAddress(seller)
+
+	// Not enough tokens
+	if !token.canTransfer(storage.getContext, seller([]byte), engine.GetExecutingScriptHash(), amountSent) {
+		return false
+	}
 
 	productHash := args[0].([]byte)
 	amountPre := []byte("AMOUNT")
 	amountKey := append(amountPre, productHash...)
 	productCost := storage.Get(storage.GetContext(), amountKey)
 
-	return amountSent == 2 * productCost.(int) // IF HE HAS, SUBTRACT, otherwise, return false
+	// Tokens don't match price + escrow
+	if amountSent != 2 * productCost.(int) { 
+		return false
+	}
+
+	//Transfer tokens
+	token.tranfser(storage.getContext, seller([]byte), engine.GetExecutingScriptHash(), amountSent)
+
+	return true
 
 }
 
@@ -149,4 +182,20 @@ func checkArgs(args []interface{}, length int) bool {
 	}
 
 	return false
+}
+
+func validateCallingAddress(desiredAddress []byte) bool {
+	return engine.GetCallingScriptHash == desiredAddress
+}
+
+func retrieveSellerAddress() interface{} {
+	sellerPre := []byte("SELLER")
+	sellerKey := append(sellerPre, productHash...)
+	seller := storage.Get(storage.GetContext(), sellerKey)
+}
+
+func retrieveBuyerAddress() interface{} {
+	buyerPre := []byte("BUYER")
+	buyerKey := append(buyerPre, productHash...)
+	buyer := storage.Get(storage.GetContext(), buyerKey)
 }
