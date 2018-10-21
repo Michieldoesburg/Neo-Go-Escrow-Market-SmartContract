@@ -8,123 +8,139 @@ import (
 	"github.com/CityOfZion/neo-storm/interop/runtime"	
 )
 
-// Check if the invoker of the contract is the specified owner
-var owner = util.FromAddress("Aej1fe4mUgou48Zzup5j8sPrE3973cJ5oz")
+const (
+	decimals   = 8
+	multiplier = 100000000
+)
 
-var locked := false
+const VERIFICATION_R = 0x01
+
+// CreateToken initializes the Token Interface for the Smart Contract to operate with
+func CreateToken() nep5.Token {
+	return nep5.Token{
+		Name:           "Marketplace Token",
+		Symbol:         "MKT",
+		Decimals:       decimals,
+		Owner:          engine.GetExecutingScriptHash(),
+		TotalSupply:    10000000 * multiplier,
+		CirculationKey: "MarketplaceTokenCirculation",
+	}
+}
 
 func Main(operation string, args []interface{}) bool {
+	token := CreateToken()
 	trigger := runtime.GetTrigger()
 
-	// Log owner upon Verification trigger
-	if trigger == runtime.Verification() {
-		if runtime.CheckWitness(owner) {
-			if !locked {
-				runtime.Log("Verified Owner")
-				return true
-			}
-		}
-	}
-
-	// Discerns between log and notify for this test
 	if trigger == runtime.Application() {
-		return handleOperation(operation, args)
+		if operation == "create_offer" {
+			// Key: Hash, Value: Item description, price, and contact info
+			if checkArgs(args, 2) {
+				return false
+			}
+			return create_offer(args)
+		}
+		if operation == "reject_application" {
+			//TODO:
+			return true
+		}
+		if operation == "confirm_purchase" {
+			//TODO check if sender is the buyer
+			productHash := args[0].([]byte)
+
+			amountPre := []byte("AMOUNT")
+			amountKey := append(amountPre, productHash...)
+			productCost := storage.Get(storage.GetContext(), amountKey)
+
+			sellerPre := []byte("SELLER")
+			sellerKey := append(sellerPre, productHash...)
+			seller := storage.Get(storage.GetContext(), sellerKey)
+
+			buyerPre := []byte("BUYER")
+			buyerKey := append(buyerPre, productHash...)
+			buyer := storage.Get(storage.GetContext(), buyerKey)
+
+			token.Transfer(storage.GetContext(), engine.GetExecutingScriptHash(), buyer.([]byte),  1/4*productCost.(int))
+			token.Transfer(storage.GetContext(), engine.GetExecutingScriptHash(), seller.([]byte),  3/4*productCost.(int))
+			return true
+		}
+
+		if operation == "apply_to_offer" {
+			// Gas and buyer's contact info.
+			if checkArgs(args, 2) {
+				return false
+			}
+			apply_to_offer(args)
+		}
+		if operation == "accept_offer" {
+			// Gas and buyer's contact info.
+			if checkArgs(args, 2) {
+				return false
+			}
+			accept_offer(args)
+		}
 	}
+	
 
 	return false
 }
 
-func handleOperation(operation string, args []interface{}) bool {
-	if operation == "create_offer" {
-		// Key: Hash, Value: Item description, price, and contact info
-		if checkArgs(args, 2) {
-			return false
-		}
-		create_offer(args)
-	}
-
-	if operation == "apply_on_offer" {
-		// Gas and buyer's contact info.
-		if checkArgs(args, 2) {
-			return false
-		}
-		apply_on_offer(args)
-	}
-
-
-	if operation == "accept_application" {
-		// Gas
-		if checkArgs(args, 2) {
-			return false
-		}
-		accept_application()
-	}
-
-	if operation == "reject_application" {
-		reject_application()
-	}
-
-
-	return false
-}
 
 // The seller puts an item on offer on the chain
 func create_offer(args []interface{}) bool {
 	ctx := storage.GetContext()
 
-	key := args[0].([]byte)
-	value := args[1].([]byte)
-	storage.Put(ctx, key, value)
+	productHash := args[0].([]byte)
+
+	descriptionPre := []byte("DESCRIPTION")
+	descriptionKey := append(descriptionPre, productHash...)
+	storage.Put(ctx, descriptionKey, args[0].([]byte))
+
+	amountPre := []byte("AMOUNT")
+	amountKey := append(amountPre, productHash...)
+	storage.Put(ctx, amountKey, args[1].([]byte))
+
+	sellerPre := []byte("SELLER")
+	sellerKey := append(sellerPre, productHash...)
+	storage.Put(ctx, sellerKey, engine.GetCallingScriptHash())
+
 	return true
 }
 
 // The buyer applies to seller's offer.
-func apply_on_offer(args []interface{}) bool {
-	tx := GetScriptContainer()
+func apply_to_offer(args []interface{}) bool {
+	
+	amountSent := getTxAmount() //CHECK IF HE HAS BALANCE
 
-	// Check if transaction has currency attached
-	references := tx.References
-	if len(references) < 1:
+	productHash := args[0].([]byte)
+	amountPre := []byte("AMOUNT")
+	amountKey := append(amountPre, productHash...)
+	productCost := storage.Get(storage.GetContext(), amountKey)
+
+	if amountSent != 2 * productCost.(int) { // IF HE HAS, SUBTRACT, otherwise, return false
 		return false
-	reference := references[0]
+	}
 
+	buyerPre := []byte("BUYER")
+	buyerKey := append(buyerPre, productHash...)
+	storage.Put(storage.GetContext(), buyerKey, engine.GetCallingScriptHash())
 
-	// Buyer's address
-	sender := GetScriptHash(reference)
-
-	// Contract's address	
-	contract_script_hash = GetExecutingScriptHash()
-
-	context = GetContext()
-
-	// Handle outputs in the transaction
-	for index, output := range tx.Outputs {
-		shash := GetScriptHash(output)
-		output_asset_id = GetAssetId(output)
-
-		if shash == contract_script_hash {
-			output_val := GetValue(output)
-
-
-		}
-	} 
-}
-
-// The seller accepts the buyer's application
-func accept_application() bool {
-	locked = true
-}
-
-// The seller rejects the buyer's application
-func reject_application() bool {
+	return true
 
 }
 
-func getCurrentTimeStamp() {
-	height := GetHeight()
-	currentBlock := GetHeader(height)
-	time := currentBlock.Timestamp 
-	return time
+// The seller puts tokens in the escrow of the offer.
+func accept_offer(args []interface{}) bool {
+	
+	//TODO: Validate if sender is the seller
+	amountSent := getTxAmount() 	//CHECK IF HE HAS BALANCE
+
+	productHash := args[0].([]byte)
+	amountPre := []byte("AMOUNT")
+	amountKey := append(amountPre, productHash...)
+	productCost := storage.Get(storage.GetContext(), amountKey)
+
+	return amountSent == 2 * productCost.(int) // IF HE HAS, SUBTRACT, otherwise, return false
+
 }
 
 func checkArgs(args []interface{}, length int) bool {
